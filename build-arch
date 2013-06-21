@@ -6,7 +6,7 @@ set -x
 # Dependencies
 yaourt -Sy --noconfirm --needed git qemu parted mbr multipath-tools arch-install-scripts
 
-modprobe dm-mod loop
+modprobe loop
 
 PKG_LIST='openssh syslinux'
 INSTALL_YAOURT='yes' # includes base-devel for AUR compiling
