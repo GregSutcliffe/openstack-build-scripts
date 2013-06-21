@@ -9,6 +9,7 @@ yaourt -Sy --noconfirm --needed git qemu parted mbr multipath-tools arch-install
 modprobe dm-mod loop
 
 PKG_LIST='openssh syslinux'
+INSTALL_YAOURT='yes' # includes base-devel for AUR compiling
 
 FILE_NAME=arch-$(date '+%Y%m%d')-x86_64
 AMI_NAME=${FILE_NAME}.raw
@@ -70,6 +71,13 @@ mkdir -p ${MOUNT_DIR}/root/.ssh
 
 # Setting-up initramfs
 arch-chroot ${MOUNT_DIR} mkinitcpio -p linux
+
+# Yaourt?
+if [ "${INSTALL_YAOURT}" = "yes" ] ; then
+  echo "Installation of Yaourt requested"
+  echo -e "[archlinuxfr]\nServer = http://repo.archlinux.fr/$arch\nSigLevel = Never" >> ${MOUNT_DIR}/etc/pacman.conf
+  arch-chroot ${MOUNT_DIR} pacman -Sy --noconfirm yaourt base-devel
+fi
 
 ###########################
 ### Setting-up extlinux ###
