@@ -1,0 +1,104 @@
+#!/bin/bash
+
+set -e
+set -x
+
+# Dependencies
+yaourt -Sy --noconfirm --needed git qemu parted mbr multipath-tools arch-install-scripts
+
+modprobe dm-mod loop
+
+PKG_LIST='openssh syslinux'
+
+FILE_NAME=arch-$(date '+%Y%m%d')-x86_64
+AMI_NAME=${FILE_NAME}.raw
+QCOW2_NAME=${FILE_NAME}.qcow2
+rm -f ${AMI_NAME}
+
+######################################              
+### Prepare the HDD (format, ext.) ###              
+######################################
+PARTED=/usr/bin/parted
+/usr/bin/qemu-img create ${AMI_NAME} 1G
+
+${PARTED} -s ${AMI_NAME} mktable msdos
+${PARTED} -s -a optimal ${AMI_NAME} mkpart primary ext3 1M 100%
+${PARTED} -s ${AMI_NAME} set 1 boot on
+install-mbr ${AMI_NAME}
+kpartx -av ${AMI_NAME}
+
+# We first use ext2, THEN convert to ext3, because that's so much faster this way.
+mkfs.ext2 /dev/mapper/loop0p1
+
+# No fsck because of X days without checks
+tune2fs -i 0 /dev/mapper/loop0p1
+
+MOUNT_DIR=`mktemp -d -t build-img.XXXXXX`
+mount -o loop /dev/mapper/loop0p1 ${MOUNT_DIR}
+pacstrap ${MOUNT_DIR} base ${PKG_LIST}
+
+############################
+### Customize the distro ###
+############################
+### Customize: access to the VM ###
+# # # # # # # # # # # # # # # # # #
+# Setup default root password to: password
+arch-chroot ${MOUNT_DIR} sh -c "echo root:password | chpasswd"
+
+# Otherwise, we have a huge backdoor, since the root password
+# is always the same.
+#sed -i "s/PermitRootLogin yes/PermitRootLogin without-password/" ${MOUNT_DIR}/etc/ssh/sshd_config
+
+### Customize: misc stuff ###
+# # # # # # # # # # # # # # #
+# Setup fstab
+echo "# /etc/fstab: static file system information.
+proc	/proc	proc	nodev,noexec,nosuid	0	0
+/dev/vda1	/	ext3	errors=remount-ro	0	1
+" > ${MOUNT_DIR}/etc/fstab
+
+# Set a basic hostname
+echo "cloudarch" > ${MOUNT_DIR}/etc/hostname
+
+# Timezone
+arch-chroot ${MOUNT_DIR} ln -s /usr/share/zoneinfo/Europe/London /etc/localtime
+
+# Services
+arch-chroot ${MOUNT_DIR} systemctl enable dhcpcd@eth0.service
+arch-chroot ${MOUNT_DIR} systemctl enable sshd.service
+mkdir -p ${MOUNT_DIR}/root/.ssh
+
+# Setting-up initramfs
+arch-chroot ${MOUNT_DIR} mkinitcpio -p linux
+
+###########################
+### Setting-up extlinux ###
+###########################
+mkdir -p ${MOUNT_DIR}/boot/extlinux
+KERNEL=`chroot ${MOUNT_DIR} find boot -name 'vmlinuz-linux'`
+RAMDISK=`chroot ${MOUNT_DIR} find boot -name 'initramfs-linux.img'`
+UUID=`blkid -o value -s UUID /dev/mapper/loop0p1`
+echo "default linux
+timeout 1
+label linux
+kernel ${KERNEL}
+append initrd=${RAMDISK} root=/dev/vda1 ro quiet" > ${MOUNT_DIR}/boot/extlinux/extlinux.conf
+cp ${MOUNT_DIR}/boot/extlinux/extlinux.conf ${MOUNT_DIR}/extlinux.conf
+extlinux --install ${MOUNT_DIR}
+
+##########################
+### Unmount everything ###
+##########################
+chroot ${MOUNT_DIR} umount /proc || true
+umount ${MOUNT_DIR}
+# Run FSCK so that resize can work
+tune2fs -j /dev/mapper/loop0p1
+fsck.ext3 -f /dev/mapper/loop0p1 || true
+#losetup -d /dev/mapper/loop0p1
+kpartx -d ${AMI_NAME}
+rmdir ${MOUNT_DIR}
+
+###########################
+### Convert Final Image ###
+###########################
+qemu-img convert -c -f raw ${AMI_NAME} -O qcow2 ${QCOW2_NAME}
