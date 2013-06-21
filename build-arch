@@ -16,8 +16,8 @@ AMI_NAME=${FILE_NAME}.raw
 QCOW2_NAME=${FILE_NAME}.qcow2
 rm -f ${AMI_NAME}
 
-######################################              
-### Prepare the HDD (format, ext.) ###              
+######################################
+### Prepare the HDD (format, ext.) ###
 ######################################
 PARTED=/usr/bin/parted
 /usr/bin/qemu-img create ${AMI_NAME} 1G
@@ -76,7 +76,7 @@ arch-chroot ${MOUNT_DIR} mkinitcpio -p linux
 # Yaourt?
 if [ "${INSTALL_YAOURT}" = "yes" ] ; then
   echo "Installation of Yaourt requested"
-  echo -e "[archlinuxfr]\nServer = http://repo.archlinux.fr/$arch\nSigLevel = Never" >> ${MOUNT_DIR}/etc/pacman.conf
+  echo -e "[archlinuxfr]\nServer = http://repo.archlinux.fr/\$arch\nSigLevel = Never" >> ${MOUNT_DIR}/etc/pacman.conf
   arch-chroot ${MOUNT_DIR} pacman -Sy --noconfirm yaourt base-devel
 fi
 
