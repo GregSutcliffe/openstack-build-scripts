@@ -66,6 +66,7 @@ arch-chroot ${MOUNT_DIR} ln -s /usr/share/zoneinfo/Europe/London /etc/localtime
 
 # Services
 arch-chroot ${MOUNT_DIR} systemctl enable dhcpcd@eth0.service
+arch-chroot ${MOUNT_DIR} systemctl enable cronie.service
 arch-chroot ${MOUNT_DIR} systemctl enable sshd.service
 mkdir -p ${MOUNT_DIR}/root/.ssh
 
