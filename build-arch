@@ -10,6 +10,8 @@ modprobe loop
 
 PKG_LIST='openssh syslinux'
 INSTALL_YAOURT='yes' # includes base-devel for AUR compiling
+YAOURT_PKGS='puppet mkinitcpio-growrootfs' # extra packages to build into the image
+WEBSERVER="yes"
 
 FILE_NAME=arch-$(date '+%Y%m%d')-x86_64
 AMI_NAME=${FILE_NAME}.raw
@@ -70,15 +72,17 @@ arch-chroot ${MOUNT_DIR} systemctl enable cronie.service
 arch-chroot ${MOUNT_DIR} systemctl enable sshd.service
 mkdir -p ${MOUNT_DIR}/root/.ssh
 
-# Setting-up initramfs
-arch-chroot ${MOUNT_DIR} mkinitcpio -p linux
-
 # Yaourt?
 if [ "${INSTALL_YAOURT}" = "yes" ] ; then
   echo "Installation of Yaourt requested"
   echo -e "[archlinuxfr]\nServer = http://repo.archlinux.fr/\$arch\nSigLevel = Never" >> ${MOUNT_DIR}/etc/pacman.conf
   arch-chroot ${MOUNT_DIR} pacman -Sy --noconfirm yaourt base-devel
+  [ -n "$YAOURT_PKGS" ] && arch-chroot ${MOUNT_DIR} yaourt -Sy --noconfirm $YAOURT_PKGS
 fi
+
+# Setting-up initramfs
+sed -i -r -e '/^HOOKS=/ { s/fsck/fsck growfs/ }' ${MOUNT_DIR}/etc/mkinitcpio.conf
+arch-chroot ${MOUNT_DIR} mkinitcpio -p linux
 
 ###########################
 ### Setting-up extlinux ###
@@ -111,3 +115,12 @@ rmdir ${MOUNT_DIR}
 ### Convert Final Image ###
 ###########################
 qemu-img convert -c -f raw ${AMI_NAME} -O qcow2 ${QCOW2_NAME}
+
+############################################################
+### Set up web server for Horzion to grab the image from ###
+############################################################
+if [ -n $WEBSERVER ] ; then
+  pacman -S --noconfirm apache
+  cp ${QCOW2_NAME} /srv/http
+  systemctl start httpd
+fi
